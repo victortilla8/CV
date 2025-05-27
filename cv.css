@@ -19,6 +19,7 @@ body {
     background: var(--1-color);
     display: flex;
     align-items: center;
+    text-align: justify;
     justify-content: center;
     flex-direction: column;
 }
