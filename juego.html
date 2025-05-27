@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        #gameContainer {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: 100%;
+            height: 90%;
+            background: rgba(14, 11, 22, 0.9);
+            z-index: 1000;
+            cursor: pointer;
+            margin-top: 2.5vw;
+        }
+        p {
+          color: aliceblue;
+          display: flex;
+          justify-content: center;
+          margin-top: 50%;
+          font-size: 20px;
+          animation: blink 1s infinite alternate;
+        }
+
+        @keyframes blink {
+            0% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+
+        #gameCanvas {
+            background: transparent;
+        }
+
+        #score {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #E7DFDD;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 18px;
+            z-index: 1001;
+        }
+
+        #lives {
+            position: absolute;
+            top: 50px;
+            left: 20px;
+            color: #E7DFDD;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 18px;
+            z-index: 1001;
+        }
+
+        #player {
+            width: 40px;
+            height: 40px;
+            position: absolute;
+            background: url('./nave.png') no-repeat center center;
+            background-size: contain;
+            transition: transform 0.2s ease;
+        }
+
+        .bullet {
+            width: 5px;
+            height: 10px;
+            position: absolute;
+            background: #A239CA;
+            border-radius: 2px;
+        }
+
+        .enemy {
+            width: 40px;
+            height: 40px;
+            position: absolute;
+            background: url('./aliens.png') no-repeat center center;
+            background-size: contain;
+        }
+
+        #controlsGuide {
+            position: relative;
+            top: 20px;
+            width: auto;
+            padding: 8px;
+            background: rgba(14, 11, 22, 0.6);
+            color: #B0BEC5;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 14px;
+            z-index: 1001;
+            border-radius: 3px;
+            opacity: 0.8;
+        }
+
+        @keyframes shake {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(-5px, 0); }
+            50% { transform: translate(5px, 0); }
+            75% { transform: translate(-5px, 0); }
+            100% { transform: translate(0, 0); }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <p id="startText">PULSA AQUI</p>
+        <div id="controlsGuide">
+            <h3>Controles del Juego:</h3>
+            <ul>
+                <li>⬅️ Flecha Izquierda: Mover a la izquierda</li>
+                <li>➡️ Flecha Derecha: Mover a la derecha</li>
+                <li>🔫 Espacio: Disparar</li>
+            </ul>
+        </div>
+        <div id="score">Puntuación: <span id="scoreValue">0</span></div>
+        <div id="lives">Vidas: <span id="livesValue">3</span></div>
+        <div id="player"></div>
+    </div>
+
+    <audio id="shootSound" src="https://example.com/shoot.mp3"></audio>
+    <audio id="alienHitSound" src="https://example.com/alien_hit.mp3"></audio>
+    <audio id="loseLifeSound" src="https://example.com/lose_life.mp3"></audio>
+    <audio id="alienSound" src="https://example.com/alien_sound.mp3" loop></audio>
+    <audio id="backgroundMusic" src="https://example.com/background_music.mp3" loop></audio>
+
+    <script>
+        const gameContainer = document.getElementById('gameContainer');
+        const player = document.getElementById('player');
+        const scoreElement = document.getElementById('scoreValue');
+        const livesElement = document.getElementById('livesValue');
+        const startText = document.getElementById('startText');
+        const controlsGuide = document.getElementById('controlsGuide');
+        const shootSound = document.getElementById('shootSound');
+        const alienHitSound = document.getElementById('alienHitSound');
+        const loseLifeSound = document.getElementById('loseLifeSound');
+        const alienSound = document.getElementById('alienSound');
+        const backgroundMusic = document.getElementById('backgroundMusic');
+        
+        let score = 0;
+        let lives = 3;
+        let bullets = [];
+        let enemies = [];
+        let playerX = 150;
+        let playerY = gameContainer.offsetHeight - 50;
+        let gameLoop;
+        let enemyCreationLoop;
+        let canShoot = true;
+
+        let PLAYER_SPEED = 5;
+        let BULLET_SPEED = 7;
+        let ENEMY_SPEED = 2;
+        let ENEMY_CREATION_INTERVAL = 2000;
+        const CONTAINER_WIDTH = 300;
+
+        player.style.left = playerX + 'px';
+        player.style.top = playerY + 'px';
+
+        const keys = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            Space: false
+        };
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === ' ' && gameStarted) {
+                e.preventDefault();
+                if (canShoot) {
+                    shoot();
+                    canShoot = false;
+                    setTimeout(() => canShoot = true, 250);
+                }
+            }
+            if (e.key in keys) {
+                keys[e.key] = true;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key in keys) {
+                keys[e.key] = false;
+            }
+        });
+
+        function shoot() {
+            const bullet = document.createElement('div');
+            bullet.className = 'bullet';
+            bullet.style.left = (playerX + 17.5) + 'px';
+            bullet.style.top = playerY + 'px';
+            gameContainer.appendChild(bullet);
+            bullets.push(bullet);
+            shootSound.play();
+        }
+
+        function createEnemy() {
+            const enemy = document.createElement('div');
+            enemy.className = 'enemy';
+            enemy.style.left = Math.random() * (CONTAINER_WIDTH - 40) + 'px';
+            enemy.style.top = '0px';
+            enemy.directionX = Math.random() < 0.5 ? 1 : -1;
+            gameContainer.appendChild(enemy);
+            enemies.push(enemy);
+            alienSound.play();
+        }
+
+        function updateGame() {
+            if (keys.ArrowLeft && playerX > 0) {
+                playerX -= PLAYER_SPEED;
+            }
+            if (keys.ArrowRight && playerX < CONTAINER_WIDTH - 40) {
+                playerX += PLAYER_SPEED;
+            }
+            player.style.left = playerX + 'px';
+
+            bullets.forEach((bullet, bulletIndex) => {
+                const bulletY = parseInt(bullet.style.top) - BULLET_SPEED;
+                if (bulletY < 0) {
+                    bullet.remove();
+                    bullets.splice(bulletIndex, 1);
+                } else {
+                    bullet.style.top = bulletY + 'px';
+                }
+            });
+
+            enemies.forEach((enemy, enemyIndex) => {
+                const enemyY = parseInt(enemy.style.top) + ENEMY_SPEED;
+                let enemyX = parseInt(enemy.style.left) + enemy.directionX * ENEMY_SPEED / 2;
+
+                if (enemyX <= 0 || enemyX >= (CONTAINER_WIDTH - 40)) {
+                    enemy.directionX *= -1;
+                }
+
+                enemy.style.left = enemyX + 'px';
+
+                if (enemyY > gameContainer.offsetHeight) {
+                    enemy.remove();
+                    enemies.splice(enemyIndex, 1);
+                    loseLife();
+                } else {
+                    enemy.style.top = enemyY + 'px';
+                }
+            });
+
+            bullets.forEach((bullet, bulletIndex) => {
+                const bulletRect = bullet.getBoundingClientRect();
+                enemies.forEach((enemy, enemyIndex) => {
+                    const enemyRect = enemy.getBoundingClientRect();
+                    if (checkCollision(bulletRect, enemyRect)) {
+                        score += 10;
+                        scoreElement.textContent = score;
+                        bullet.remove();
+                        bullets.splice(bulletIndex, 1);
+                        enemy.remove();
+                        enemies.splice(enemyIndex, 1);
+                        alienHitSound.play();
+                        increaseDifficulty();
+                    }
+                });
+            });
+        }
+
+        function checkCollision(rect1, rect2) {
+            return !(rect1.right < rect2.left || 
+                    rect1.left > rect2.right || 
+                    rect1.bottom < rect2.top || 
+                    rect1.top > rect2.bottom);
+        }
+
+        function loseLife() {
+            lives--;
+            livesElement.textContent = lives;
+
+            player.style.animation = 'shake 0.5s';
+            player.addEventListener('animationend', () => {
+                player.style.animation = '';
+            });
+            loseLifeSound.play();
+
+            if (lives <= 0) {
+                endGame();
+            }
+        }
+
+        function endGame() {
+            clearInterval(gameLoop);
+            clearInterval(enemyCreationLoop);
+            alert('¡Has perdido todas tus vidas! Fin del juego. Pulsa en el fondo para reiniciar.');
+            resetGame();
+        }
+
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            ENEMY_SPEED = 2;
+            ENEMY_CREATION_INTERVAL = 2000;
+            scoreElement.textContent = score;
+            livesElement.textContent = lives;
+            bullets.forEach(bullet => bullet.remove());
+            enemies.forEach(enemy => enemy.remove());
+            bullets = [];
+            enemies = [];
+            gameStarted = false;
+            startText.style.display = 'flex';
+            controlsGuide.style.display = 'flex';
+        }
+
+        function increaseDifficulty() {
+            if (score % 100 === 0) {
+                ENEMY_SPEED += 0.5;
+            }
+
+            if (score % 200 === 0 && ENEMY_CREATION_INTERVAL > 500) {
+                clearInterval(enemyCreationLoop);
+                ENEMY_CREATION_INTERVAL -= 200;
+                enemyCreationLoop = setInterval(createEnemy, ENEMY_CREATION_INTERVAL);
+            }
+        }
+
+        let gameStarted = false;
+
+        gameContainer.addEventListener('click', () => {
+            if (!gameStarted) {
+                startGame();
+                gameStarted = true;
+                backgroundMusic.play();
+            }
+        });
+
+        function startGame() {
+            startText.style.display = 'none';
+            controlsGuide.style.display = 'none';
+            enemyCreationLoop = setInterval(createEnemy, ENEMY_CREATION_INTERVAL);
+            gameLoop = setInterval(updateGame, 1000 / 60);
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
